@@ -1,0 +1,111 @@
+DPU_DIR := dpu
+HOST_DIR := host
+BUILDDIR ?= build
+NR_TASKLETS ?= 12
+NR_DPUS ?= 2560
+STACK_SIZE ?= 2048
+CC = g++
+
+PAPI_INSTALL_DIR := [path_to_your_PAPI]/src/install
+
+define conf_filename
+	${BUILDDIR}/.NR_DPUS_$(1)_NR_TASKLETS_$(2).conf
+endef
+CONF := $(call conf_filename,${NR_DPUS},${NR_TASKLETS})
+
+HOST_TARGET := ${BUILDDIR}/zd_tree_host
+
+DPU_TARGET_INSERT := ${BUILDDIR}/zd_tree_dpu_insert
+DPU_TARGET_BOX_FETCH := ${BUILDDIR}/zd_tree_dpu_box_fetch
+DPU_TARGET_BOX_COUNT := ${BUILDDIR}/zd_tree_dpu_box_count
+DPU_TARGET_KNN := ${BUILDDIR}/zd_tree_dpu_knn
+DPU_TARGET_MISC := ${BUILDDIR}/zd_tree_dpu_misc
+
+COMMON_INCLUDES := common
+COMMON_INCLUDE_SOURCES := $(wildcard ${COMMON_INCLUDES}/*.h)
+HOST_INCLUDES := $(wildcard ${HOST_DIR}/*.hpp) 
+HOST_SOURCES := $(wildcard ${HOST_DIR}/*.cpp) 
+DPU_INCLUDES := $(wildcard ${DPU_DIR}/*.h)
+DPU_SOURCES := $(wildcard ${DPU_DIR}/*.c)
+
+# pim_base
+COMMON_PIM_BASE_PTH := pim_base/common
+HOST_PIM_BASE_PTH := pim_base/host
+DPU_PIM_BASE_PTH := pim_base/dpu
+HOST_PIM_INTERFACE_PTH := pim_base/pim_interface
+
+COMMON_PIM_BASE_INCLUDES := $(wildcard ${COMMON_PIM_BASE_PTH}/*.h)
+HOST_PIM_BASE_INCLUDES := $(wildcard ${HOST_PIM_BASE_PTH}/*.hpp)
+DPU_PIM_BASE_INCLUDES := $(wildcard ${DPU_PIM_BASE_PTH}/*.h)
+HOST_PIM_INTERFACE_INCLUDES := $(wildcard ${HOST_PIM_INTERFACE_PTH}/*.hpp)
+
+# ParlayLib
+PARLAY_LIB_PTH := third-party/parlaylib/include
+ARGPARSE_LIB_PTH := third-party/argparse/include
+
+# UPMEM src
+UPMEM_SRC_DIR := third-party/UPMEM-sdk/src
+INCLUDE_UPMEM_SRC_DIR := -I${UPMEM_SRC_DIR}
+INCLUDE_UPMEM_SRC_LIBS := ${INCLUDE_UPMEM_SRC_DIR} \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/api/include/api \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/api/include/lowlevel \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/api/src/include \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/commons/include \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/commons/src/properties \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/hw/src/rank \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/hw/src/commons \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/ufi/include/ufi \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/ufi/include \
+	${INCLUDE_UPMEM_SRC_DIR}/backends/verbose/src
+
+.PHONY: all clean test
+
+__dirs := $(shell mkdir -p ${BUILDDIR})
+
+COMMON_FLAGS := -Wall -Wextra -g -I${COMMON_INCLUDES} -I${COMMON_PIM_BASE_PTH}
+HOST_LIB_FLAGS := -isystem ${PARLAY_LIB_PTH} -isystem ${ARGPARSE_LIB_PTH} -I${HOST_PIM_BASE_PTH} -I${HOST_PIM_INTERFACE_PTH} ${INCLUDE_UPMEM_SRC_LIBS} -lstdc++fs \
+ 	-I${PAPI_INSTALL_DIR}/include -L${PAPI_INSTALL_DIR}/lib ${PAPI_INSTALL_DIR}/lib/libpapi.a
+HOST_FLAGS := ${COMMON_FLAGS} -std=c++17 -lpthread -O3 -I${HOST_DIR} ${HOST_LIB_FLAGS} `dpu-pkg-config --cflags --libs dpu` -march=native -DNR_TASKLETS=${NR_TASKLETS} -DNR_DPUS=${NR_DPUS} \
+	-DUSE_PAPI=1
+DPU_LIB_FLAGS := -I${DPU_PIM_BASE_PTH}
+DPU_FLAGS := ${COMMON_FLAGS} -I${DPU_DIR} ${DPU_LIB_FLAGS} -DSTACK_SIZE_DEFAULT=${STACK_SIZE} -DNR_TASKLETS=${NR_TASKLETS} -Oz
+
+all: ${HOST_TARGET} ${DPU_TARGET_KNN} ${DPU_TARGET_BOX_FETCH} ${DPU_TARGET_BOX_COUNT} ${DPU_TARGET_INSERT} ${DPU_TARGET_MISC}
+
+${CONF}:
+	$(RM) $(call conf_filename,*,*)
+	touch ${CONF}
+
+${HOST_TARGET}: ${HOST_SOURCES} ${HOST_INCLUDES} ${HOST_PIM_BASE_INCLUDES} ${COMMON_INCLUDES} ${COMMON_INCLUDE_SOURCES} ${COMMON_PIM_BASE_INCLUDES} ${HOST_PIM_INTERFACE_INCLUDES} ${CONF}
+	$(CC) -o $@ ${HOST_SOURCES} ${HOST_FLAGS}
+
+
+${DPU_TARGET_INSERT}: ${DPU_SOURCES} ${DPU_INCLUDES} ${DPU_PIM_BASE_INCLUDES} ${COMMON_INCLUDES} ${COMMON_INCLUDE_SOURCES} ${COMMON_PIM_BASE_INCLUDES} ${CONF}
+	dpu-upmem-dpurte-clang ${DPU_FLAGS} -o $@ ${DPU_SOURCES} -DINSERT_NODE_ON=1 -DDPU_INIT_ON=1
+
+${DPU_TARGET_BOX_FETCH}: ${DPU_SOURCES} ${DPU_INCLUDES} ${DPU_PIM_BASE_INCLUDES} ${COMMON_INCLUDES} ${COMMON_INCLUDE_SOURCES} ${COMMON_PIM_BASE_INCLUDES} ${CONF}
+	dpu-upmem-dpurte-clang ${DPU_FLAGS} -o $@ ${DPU_SOURCES} -DBOX_RANGE_FETCH_ON=1 -DDPU_INIT_ON=1
+
+${DPU_TARGET_BOX_COUNT}: ${DPU_SOURCES} ${DPU_INCLUDES} ${DPU_PIM_BASE_INCLUDES} ${COMMON_INCLUDES} ${COMMON_INCLUDE_SOURCES} ${COMMON_PIM_BASE_INCLUDES} ${CONF}
+	dpu-upmem-dpurte-clang ${DPU_FLAGS} -o $@ ${DPU_SOURCES} -DBOX_RANGE_COUNT_ON=1 -DDPU_INIT_ON=1
+
+${DPU_TARGET_KNN}: ${DPU_SOURCES} ${DPU_INCLUDES} ${DPU_PIM_BASE_INCLUDES} ${COMMON_INCLUDES} ${COMMON_INCLUDE_SOURCES} ${COMMON_PIM_BASE_INCLUDES} ${CONF}
+	dpu-upmem-dpurte-clang ${DPU_FLAGS} -o $@ ${DPU_SOURCES} -DKNN_ON=1
+
+${DPU_TARGET_MISC}: ${DPU_SOURCES} ${DPU_INCLUDES} ${DPU_PIM_BASE_INCLUDES} ${COMMON_INCLUDES} ${COMMON_INCLUDE_SOURCES} ${COMMON_PIM_BASE_INCLUDES} ${CONF}
+	dpu-upmem-dpurte-clang ${DPU_FLAGS} -o $@ ${DPU_SOURCES} -DDPU_INIT_ON=1 -DSEARCH_TEST_ON=1 -DFETCH_NODE_ON=1 -DDPU_STORAGE_STAT_ON=1
+
+
+clean:
+	$(RM) -r $(BUILDDIR)
+
+test_c: ${HOST_TARGET} ${DPU_TARGET_KNN} ${DPU_TARGET_BOX_FETCH} ${DPU_TARGET_BOX_COUNT} ${DPU_TARGET_INSERT} ${DPU_TARGET_MISC}
+	./${HOST_TARGET}
+
+test: test_c
+
+debug: ${HOST_TARGET} ${DPU_TARGET_KNN} ${DPU_TARGET_BOX_FETCH} ${DPU_TARGET_BOX_COUNT} ${DPU_TARGET_INSERT} ${DPU_TARGET_MISC}
+	dpu-lldb ${HOST_TARGET}
+
+test_cpu: ${HOST_TARGET}
+	./${HOST_TARGET}
