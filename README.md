@@ -5,15 +5,20 @@ This repository contains an implementation of the **throughput-optimized version
 If you use our code, please cite:
 
 ```bibtex
-@inproceedings{zhao2026pimzdtree,
-    author    = {Zhao, Yiwei and Kang, Hongbo and Men, Ziyang and Gu, Yan and Blelloch, Guy E. and Dhulipala, Laxman and McGuffey, Charles and Gibbons, Phillip B.},
-    title     = {{PIM-zd-tree: A Fast Space-Partitioning Index Leveraging Processing-in-memory}},
-    year      = {2026},
+@inproceedings{zhao2026pim,
+    author = {Zhao, Yiwei and Kang, Hongbo and Men, Ziyang and Gu, Yan and Blelloch, Guy E. and Dhulipala, Laxman and McGuffey, Charles and Gibbons, Phillip B.},
+    title = {PIM-zd-tree: A Fast Space-Partitioning Index Leveraging Processing-in-Memory},
+    year = {2026},
+    isbn = {9798400723100},
     publisher = {Association for Computing Machinery},
-    address   = {New York, NY, USA},
-    booktitle = {Proceedings of the 31st ACM SIGPLAN Symposium on Principles and Practice of Parallel Programming},
-    location  = {Sydney, Australia},
-    series    = {PPoPP '26}
+    address = {New York, NY, USA},
+    url = {https://doi.org/10.1145/3774934.3786411},
+    doi = {10.1145/3774934.3786411},
+    booktitle = {Proceedings of the 31st ACM SIGPLAN Annual Symposium on Principles and Practice of Parallel Programming},
+    pages = {480–495},
+    numpages = {16},
+    location = {Sydney, NSW, Australia},
+    series = {PPoPP '26}
 }
 ```
 
